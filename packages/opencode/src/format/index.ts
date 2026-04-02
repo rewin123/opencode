@@ -164,7 +164,7 @@ export namespace Format {
           result.push({
             name: formatter.name,
             extensions: formatter.extensions,
-            enabled: isOn,
+            enabled: !!isOn,
           })
         }
         return result
