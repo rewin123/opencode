@@ -675,6 +675,7 @@ export namespace Provider {
             return loaded as SDK
           }
 
+          // Non-bundled provider — will require user consent before downloading
           let installedPath: string
           if (!model.api.npm.startsWith("file://")) {
             const item = await Npm.add(model.api.npm)

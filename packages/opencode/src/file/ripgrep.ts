@@ -145,6 +145,22 @@ export namespace Ripgrep {
       const filename = `ripgrep-${version}-${config.platform}.${config.extension}`
       const url = `https://github.com/BurntSushi/ripgrep/releases/download/${version}/${filename}`
 
+      // Require explicit consent for external downloads
+      if (process.stdin.isTTY) {
+        const readline = await import("readline")
+        const rl = readline.createInterface({ input: process.stdin, output: process.stderr })
+        const answer = await new Promise<string>((resolve) => {
+          rl.question(`\n[DOWNLOAD CONSENT] ripgrep (rg) not found. Download from github.com? (y/N): `, resolve)
+        })
+        rl.close()
+        if (answer.trim().toLowerCase() !== "y") {
+          throw new DownloadFailedError({ url, status: 0 })
+        }
+      } else {
+        log.warn("ripgrep not found and cannot prompt for download consent (non-interactive)")
+        throw new DownloadFailedError({ url, status: 0 })
+      }
+
       const response = await fetch(url)
       if (!response.ok) throw new DownloadFailedError({ url, status: response.status })
 

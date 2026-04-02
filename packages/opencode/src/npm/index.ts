@@ -8,9 +8,37 @@ import { readdir, rm } from "fs/promises"
 import { Filesystem } from "@/util/filesystem"
 import { Flock } from "@/util/flock"
 import { Arborist } from "@npmcli/arborist"
+import readline from "readline"
 
 export namespace Npm {
   const log = Log.create({ service: "npm" })
+
+  // Track user consent for external downloads within the current session
+  const _consentCache = new Map<string, boolean>()
+
+  async function requestDownloadConsent(pkg: string, source: string): Promise<boolean> {
+    const key = `${source}:${pkg}`
+    if (_consentCache.has(key)) return _consentCache.get(key)!
+
+    // Non-interactive mode — deny by default
+    if (!process.stdin.isTTY) {
+      log.warn("external download blocked (non-interactive)", { pkg, source })
+      return false
+    }
+
+    const rl = readline.createInterface({ input: process.stdin, output: process.stderr })
+    const answer = await new Promise<string>((resolve) => {
+      rl.question(
+        `\n[DOWNLOAD CONSENT] opencode wants to download "${pkg}" from ${source}.\nAllow? (y/N): `,
+        resolve,
+      )
+    })
+    rl.close()
+    const allowed = answer.trim().toLowerCase() === "y"
+    _consentCache.set(key, allowed)
+    if (!allowed) log.warn("external download denied by user", { pkg, source })
+    return allowed
+  }
 
   export const InstallFailedError = NamedError.create(
     "NpmInstallFailedError",
@@ -36,6 +64,7 @@ export namespace Npm {
   }
 
   export async function outdated(pkg: string, cachedVersion: string): Promise<boolean> {
+    if (!(await requestDownloadConsent(pkg, "registry.npmjs.org"))) return false
     const response = await fetch(`https://registry.npmjs.org/${pkg}`)
     if (!response.ok) {
       log.warn("Failed to resolve latest version, using cached", { pkg, cachedVersion })
@@ -56,6 +85,9 @@ export namespace Npm {
   }
 
   export async function add(pkg: string) {
+    if (!(await requestDownloadConsent(pkg, "registry.npmjs.org"))) {
+      throw new InstallFailedError({ pkg })
+    }
     const dir = directory(pkg)
     await using _ = await Flock.acquire(`npm-install:${Filesystem.resolve(dir)}`)
     log.info("installing package", {
@@ -97,6 +129,7 @@ export namespace Npm {
   }
 
   export async function install(dir: string) {
+    if (!(await requestDownloadConsent(dir, "registry.npmjs.org"))) return
     await using _ = await Flock.acquire(`npm-install:${dir}`)
     log.info("checking dependencies", { dir })
 
@@ -148,6 +181,11 @@ export namespace Npm {
   export async function which(pkg: string) {
     const dir = directory(pkg)
     const binDir = path.join(dir, "node_modules", ".bin")
+    // Check if already installed locally before triggering consent
+    const existingBin = await readdir(binDir).catch(() => [])
+    if (existingBin.length === 0) {
+      if (!(await requestDownloadConsent(pkg, "registry.npmjs.org"))) return undefined
+    }
 
     const pick = async () => {
       const files = await readdir(binDir).catch(() => [])

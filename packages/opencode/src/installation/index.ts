@@ -349,11 +349,12 @@ export namespace Installation {
     return runPromise((svc) => svc.method())
   }
 
-  export async function latest(installMethod?: Method): Promise<string> {
-    return runPromise((svc) => svc.latest(installMethod))
+  export async function latest(_installMethod?: Method): Promise<string> {
+    // Disabled: no phone-home for update checks
+    return VERSION
   }
 
-  export async function upgrade(m: Method, target: string): Promise<void> {
-    return runPromise((svc) => svc.upgrade(m, target))
+  export async function upgrade(_m: Method, _target: string): Promise<void> {
+    // Disabled: no phone-home for upgrades
   }
 }
