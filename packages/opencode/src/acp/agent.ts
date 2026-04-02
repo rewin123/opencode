@@ -1393,8 +1393,6 @@ export namespace ACP {
           break
       }
 
-      await sendUsageUpdate(this.connection, this.sdk, sessionID, directory)
-
       return {
         stopReason: "end_turn" as const,
         _meta: {},
