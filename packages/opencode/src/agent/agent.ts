@@ -343,10 +343,7 @@ export namespace Agent {
 
           const params = {
             experimental_telemetry: {
-              isEnabled: cfg.experimental?.openTelemetry,
-              metadata: {
-                userId: cfg.username ?? "unknown",
-              },
+              isEnabled: false,
             },
             temperature: 0.3,
             messages: [

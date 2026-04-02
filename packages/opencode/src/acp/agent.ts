@@ -54,74 +54,7 @@ const DEFAULT_VARIANT_VALUE = "default"
 export namespace ACP {
   const log = Log.create({ service: "acp-agent" })
 
-  async function getContextLimit(
-    sdk: OpencodeClient,
-    providerID: ProviderID,
-    modelID: ModelID,
-    directory: string,
-  ): Promise<number | null> {
-    const providers = await sdk.config
-      .providers({ directory })
-      .then((x) => x.data?.providers ?? [])
-      .catch((error) => {
-        log.error("failed to get providers for context limit", { error })
-        return []
-      })
 
-    const provider = providers.find((p) => p.id === providerID)
-    const model = provider?.models[modelID]
-    return model?.limit.context ?? null
-  }
-
-  async function sendUsageUpdate(
-    connection: AgentSideConnection,
-    sdk: OpencodeClient,
-    sessionID: string,
-    directory: string,
-  ): Promise<void> {
-    const messages = await sdk.session
-      .messages({ sessionID, directory }, { throwOnError: true })
-      .then((x) => x.data)
-      .catch((error) => {
-        log.error("failed to fetch messages for usage update", { error })
-        return undefined
-      })
-
-    if (!messages) return
-
-    const assistantMessages = messages.filter(
-      (m): m is { info: AssistantMessage; parts: SessionMessageResponse["parts"] } => m.info.role === "assistant",
-    )
-
-    const lastAssistant = assistantMessages[assistantMessages.length - 1]
-    if (!lastAssistant) return
-
-    const msg = lastAssistant.info
-    if (!msg.providerID || !msg.modelID) return
-    const size = await getContextLimit(sdk, ProviderID.make(msg.providerID), ModelID.make(msg.modelID), directory)
-
-    if (!size) {
-      // Cannot calculate usage without known context size
-      return
-    }
-
-    const used = msg.tokens.input + (msg.tokens.cache?.read ?? 0)
-    const totalCost = assistantMessages.reduce((sum, m) => sum + m.info.cost, 0)
-
-    await connection
-      .sessionUpdate({
-        sessionId: sessionID,
-        update: {
-          sessionUpdate: "usage_update",
-          used,
-          size,
-          cost: { amount: totalCost, currency: "USD" },
-        },
-      })
-      .catch((error) => {
-        log.error("failed to send usage update", { error })
-      })
-  }
 
   export async function init({ sdk: _sdk }: { sdk: OpencodeClient }) {
     return {
@@ -652,7 +585,7 @@ export namespace ACP {
           await this.processMessage(msg)
         }
 
-        await sendUsageUpdate(this.connection, this.sdk, sessionId, directory)
+
 
         return result
       } catch (e) {
@@ -762,7 +695,7 @@ export namespace ACP {
           await this.processMessage(msg)
         }
 
-        await sendUsageUpdate(this.connection, this.sdk, sessionId, directory)
+
 
         return mode
       } catch (e) {
@@ -793,7 +726,7 @@ export namespace ACP {
           sessionId,
         })
 
-        await sendUsageUpdate(this.connection, this.sdk, sessionId, directory)
+
 
         return result
       } catch (e) {
@@ -1414,7 +1347,7 @@ export namespace ACP {
         })
         const msg = response.data?.info
 
-        await sendUsageUpdate(this.connection, this.sdk, sessionID, directory)
+
 
         return {
           stopReason: "end_turn" as const,
@@ -1437,7 +1370,7 @@ export namespace ACP {
         })
         const msg = response.data?.info
 
-        await sendUsageUpdate(this.connection, this.sdk, sessionID, directory)
+
 
         return {
           stopReason: "end_turn" as const,
@@ -1561,20 +1494,6 @@ export namespace ACP {
 
     if (specified && !providers.length) return specified
 
-    const opencodeProvider = providers.find((p) => p.id === "opencode")
-    if (opencodeProvider) {
-      if (opencodeProvider.models["big-pickle"]) {
-        return { providerID: ProviderID.opencode, modelID: ModelID.make("big-pickle") }
-      }
-      const [best] = Provider.sort(Object.values(opencodeProvider.models))
-      if (best) {
-        return {
-          providerID: ProviderID.make(best.providerID),
-          modelID: ModelID.make(best.id),
-        }
-      }
-    }
-
     const models = providers.flatMap((p) => Object.values(p.models))
     const [best] = Provider.sort(models)
     if (best) {
@@ -1586,7 +1505,7 @@ export namespace ACP {
 
     if (specified) return specified
 
-    return { providerID: ProviderID.opencode, modelID: ModelID.make("big-pickle") }
+    throw new Error("No providers configured. Please configure a provider in opencode.json.")
   }
 
   function parseUri(

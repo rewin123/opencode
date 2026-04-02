@@ -162,7 +162,7 @@ export namespace ToolRegistry {
         const allTools = yield* all(s.custom)
         const filtered = allTools.filter((tool) => {
           if (tool.id === "codesearch" || tool.id === "websearch") {
-            return model.providerID === ProviderID.opencode || Flag.OPENCODE_ENABLE_EXA
+            return Flag.OPENCODE_ENABLE_EXA
           }
 
           const usePatch =
