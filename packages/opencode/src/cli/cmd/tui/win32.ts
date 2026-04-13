@@ -1,7 +1,10 @@
 import { dlopen, ptr } from "bun:ffi"
 
 const STD_INPUT_HANDLE = -10
+const STD_OUTPUT_HANDLE = -11
 const ENABLE_PROCESSED_INPUT = 0x0001
+const ENABLE_VIRTUAL_TERMINAL_INPUT = 0x0200
+const ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
 
 const kernel = () =>
   dlopen("kernel32.dll", {
@@ -38,6 +41,44 @@ export function win32DisableProcessedInput() {
   const mode = buf[0]!
   if ((mode & ENABLE_PROCESSED_INPUT) === 0) return
   k32!.symbols.SetConsoleMode(handle, mode & ~ENABLE_PROCESSED_INPUT)
+}
+
+/**
+ * Enable Virtual Terminal (VT) sequence processing on Windows.
+ *
+ * On Windows Server 2016 and some Windows 10 builds, the legacy conhost.exe
+ * does not enable ENABLE_VIRTUAL_TERMINAL_INPUT by default. Without it,
+ * special keys (arrows, Enter, Escape, etc.) are delivered as Windows Console
+ * Input Records instead of VT/ANSI escape sequences, which breaks TUI
+ * frameworks that expect VT input.
+ *
+ * This also enables ENABLE_VIRTUAL_TERMINAL_PROCESSING on stdout so the
+ * console interprets ANSI escape codes for rendering.
+ */
+export function win32EnableVTMode() {
+  if (process.platform !== "win32") return
+  if (!process.stdin.isTTY) return
+  if (!load()) return
+
+  const buf = new Uint32Array(1)
+
+  // Enable VT input sequences on stdin
+  const stdinHandle = k32!.symbols.GetStdHandle(STD_INPUT_HANDLE)
+  if (k32!.symbols.GetConsoleMode(stdinHandle, ptr(buf)) !== 0) {
+    const mode = buf[0]!
+    if ((mode & ENABLE_VIRTUAL_TERMINAL_INPUT) === 0) {
+      k32!.symbols.SetConsoleMode(stdinHandle, mode | ENABLE_VIRTUAL_TERMINAL_INPUT)
+    }
+  }
+
+  // Enable VT output processing on stdout
+  const stdoutHandle = k32!.symbols.GetStdHandle(STD_OUTPUT_HANDLE)
+  if (k32!.symbols.GetConsoleMode(stdoutHandle, ptr(buf)) !== 0) {
+    const mode = buf[0]!
+    if ((mode & ENABLE_VIRTUAL_TERMINAL_PROCESSING) === 0) {
+      k32!.symbols.SetConsoleMode(stdoutHandle, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING)
+    }
+  }
 }
 
 /**
@@ -82,9 +123,19 @@ export function win32InstallCtrlCGuard() {
 
   const enforce = () => {
     if (k32!.symbols.GetConsoleMode(handle, ptr(buf)) === 0) return
-    const mode = buf[0]!
-    if ((mode & ENABLE_PROCESSED_INPUT) === 0) return
-    k32!.symbols.SetConsoleMode(handle, mode & ~ENABLE_PROCESSED_INPUT)
+    let mode = buf[0]!
+    let changed = false
+    // Clear ENABLE_PROCESSED_INPUT to prevent Ctrl+C from becoming CTRL_C_EVENT
+    if (mode & ENABLE_PROCESSED_INPUT) {
+      mode &= ~ENABLE_PROCESSED_INPUT
+      changed = true
+    }
+    // Ensure ENABLE_VIRTUAL_TERMINAL_INPUT stays on (Server 2016 compat)
+    if ((mode & ENABLE_VIRTUAL_TERMINAL_INPUT) === 0) {
+      mode |= ENABLE_VIRTUAL_TERMINAL_INPUT
+      changed = true
+    }
+    if (changed) k32!.symbols.SetConsoleMode(handle, mode)
   }
 
   // Some runtimes can re-apply console modes on the next tick; enforce twice.
