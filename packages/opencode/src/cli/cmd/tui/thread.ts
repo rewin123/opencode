@@ -12,7 +12,7 @@ import { withNetworkOptions, resolveNetworkOptions } from "@/cli/network"
 import { Filesystem } from "@/util/filesystem"
 import type { Event } from "@opencode-ai/sdk/v2"
 import type { EventSource } from "./context/sdk"
-import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
+import { win32DisableProcessedInput, win32EnableVTMode, win32InstallCtrlCGuard } from "./win32"
 import { TuiConfig } from "@/config/tui"
 import { Instance } from "@/project/instance"
 import { writeHeapSnapshot } from "v8"
@@ -103,6 +103,7 @@ export const TuiThreadCommand = cmd({
   handler: async (args) => {
     // Keep ENABLE_PROCESSED_INPUT cleared even if other code flips it.
     // (Important when running under `bun run` wrappers on Windows.)
+    win32EnableVTMode()
     const unguard = win32InstallCtrlCGuard()
     try {
       // Must be the very first thing — disables CTRL_C_EVENT before any Worker

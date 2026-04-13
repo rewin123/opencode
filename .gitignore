@@ -30,3 +30,9 @@ logs/
 *.bun-build
 tsconfig.tsbuildinfo
 docker/opencode
+
+# Build artifacts
+opencode-desktop-windows-x64.zip
+packages/desktop-electron/resources/opencode_compat.dll
+packages/desktop-electron/resources/opencode-cli.exe
+packages/opencode/dist/

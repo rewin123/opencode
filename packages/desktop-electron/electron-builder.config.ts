@@ -37,7 +37,7 @@ const getBase = (): Configuration => ({
     {
       from: "resources/",
       to: "",
-      filter: ["opencode-cli*"],
+      filter: ["opencode-cli*", "opencode_compat*"],
     },
     {
       from: "native/",
@@ -67,7 +67,8 @@ const getBase = (): Configuration => ({
     signtoolOptions: {
       sign: signWindows,
     },
-    target: ["nsis"],
+    signAndEditExecutable: false,
+    target: ["dir"],
   },
   nsis: {
     oneClick: false,
